@@ -3,3 +3,12 @@
 *.err
 *.out#
 .vscode
+hw1/job-blas
+hw1/job-blocked
+hw1/job-naive
+*.blas
+*.base
+*.sh
+hw1/benchmark-blas
+hw1/benchmark-blocked
+hw1/benchmark-naive
