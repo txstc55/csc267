@@ -18,3 +18,10 @@ hw1/benchmark-naive
 *.DS_Store
 hw2/auto-*
 hw2/job-*
+*.txt
+hw2/pthreads
+hw2/openmp
+hw2/serial
+hw2/mpi
+hw2/autograder
+hw2/*.stdout
