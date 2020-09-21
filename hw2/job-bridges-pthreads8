@@ -1,8 +1,0 @@
-#!/bin/bash
-#SBATCH -A sc5fp4p
-#SBATCH -J particle-pthreads8
-#SBATCH -o particle-pthreads8.stdout
-#SBATCH -n 8         
-#SBATCH -p RM
-#SBATCH -t 00:10:00     
-./pthreads -p 8 -n 50000 -o pthreads.txt
