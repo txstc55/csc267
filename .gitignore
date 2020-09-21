@@ -16,3 +16,5 @@ hw1/benchmark-naive
 *.docx
 *.py
 *.DS_Store
+hw2/auto-*
+hw2/job-*
