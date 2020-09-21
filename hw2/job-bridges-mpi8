@@ -1,0 +1,8 @@
+#!/bin/bash
+#SBATCH -A sc5fp4p
+#SBATCH -J particle-mpi8
+#SBATCH -o particle-mpi8.stdout
+#SBATCH -N 1 -n 8         
+#SBATCH -p RM
+#SBATCH -t 00:10:00     
+mpirun -np 8 ./mpi -n 5000 -o mpi.txt

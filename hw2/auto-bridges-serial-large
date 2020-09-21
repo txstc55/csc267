@@ -1,0 +1,17 @@
+#!/bin/bash
+#SBATCH -A sc5fp4p 
+#SBATCH -J auto-particle-serial-large
+#SBATCH -o auto-particle-serial-large.stdout
+#SBATCH -n 1         
+#SBATCH -p RM
+#SBATCH -t 00:10:00
+#SBATCH -N 1         
+     
+rm serial_sum.txt
+./serial -n 1000 -no -s serial_sum.txt
+./serial -n 2000 -no -s serial_sum.txt
+./serial -n 4000 -no -s serial_sum.txt
+./serial -n 8000 -no -s serial_sum.txt
+./serial -n 16000 -no -s serial_sum.txt
+./autograder -v serial -s serial_sum.txt
+

@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH -A sc5fp4p
+#SBATCH -J auto-particle-mpi-small
+#SBATCH -o auto-particle-mpi-small.stdout
+#SBATCH -N 1 -n 8         
+#SBATCH -p RM
+#SBATCH -t 00:10:00     
+
+
+export I_MPI_JOB_RESPECT_PROCESS_PLACEMENT=0
+
+rm mpi_sum.txt
+
+mpirun -np 1 ./serial -n 2000 -no -s mpi_sum.txt
+mpirun -np 1 ./mpi -n 2000 -no -s mpi_sum.txt
+mpirun -np 2 ./mpi -n 2000 -no -s mpi_sum.txt
+mpirun -np 4 ./mpi -n 2000 -no -s mpi_sum.txt
+mpirun -np 8 ./mpi -n 2000 -no -s mpi_sum.txt
+mpirun -np 2 ./mpi -n 4000 -no -s mpi_sum.txt
+mpirun -np 4 ./mpi -n 8000 -no -s mpi_sum.txt
+mpirun -np 8 ./mpi -n 16000 -no -s mpi_sum.txt
+mpirun -np 1 ./autograder -v mpi -s mpi_sum.txt
