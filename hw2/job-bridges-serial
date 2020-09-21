@@ -1,8 +1,0 @@
-#!/bin/bash
-#SBATCH -A sc5fp4p
-#SBATCH -J particle-serial
-#SBATCH -o particle-serial.stdout
-#SBATCH -n 1         
-#SBATCH -p RM
-#SBATCH -t 00:10:00     
-./serial -n 1000 -o serial.txt
