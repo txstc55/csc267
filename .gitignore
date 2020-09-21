@@ -12,3 +12,6 @@ hw1/job-naive
 hw1/benchmark-blas
 hw1/benchmark-blocked
 hw1/benchmark-naive
+*.pdf
+*.docx
+*.py
