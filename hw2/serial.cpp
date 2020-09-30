@@ -65,8 +65,8 @@ int main(int argc, char **argv)
     init_particles(n, particles);
 
     // init the bin
-    vector<vector<particle_t>> particle_bins;
-    buildBins(particle_bins, particles, n);
+    vector<vector<particle_t>> bins;
+    buildBins(bins, particles, n);
 
     // whenever a particle is moved out of the bin
     // it will be placed here first
@@ -86,7 +86,7 @@ int main(int argc, char **argv)
         {
             for (int j = 0; j < num_bin_1d; j++)
             {
-                vector<particle_t> &bin = particle_bins[i * num_bin_1d + j];
+                vector<particle_t> &bin = bins[i * num_bin_1d + j];
                 if (bin.size() != 0)
                 {
                     for (int k = 0; k < bin.size(); k++)
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
                     {
                         for (int j_neighbor = max(0, j - 1); j_neighbor < min(num_bin_1d, j + 2); j_neighbor++)
                         {
-                            vector<particle_t> &bin_neighbor = particle_bins[i_neighbor * num_bin_1d + j_neighbor];
+                            vector<particle_t> &bin_neighbor = bins[i_neighbor * num_bin_1d + j_neighbor];
                             for (int k = 0; k < bin.size(); k++)
                             {
                                 for (int l = 0; l < bin_neighbor.size(); l++)
@@ -116,7 +116,7 @@ int main(int argc, char **argv)
         {
             for (int j = 0; j < num_bin_1d; j++)
             {
-                vector<particle_t> &bin = particle_bins[i * num_bin_1d + j];
+                vector<particle_t> &bin = bins[i * num_bin_1d + j];
                 int current_index = 0;
                 int last = bin.size();
                 for (int k = 0; k < bin.size(); k++)
@@ -142,7 +142,7 @@ int main(int argc, char **argv)
         // deal with the particles that has been moved out of the bin
         for (int i = 0; i < moved_particles.size(); i++)
         {
-            particle_bins[get<1>(moved_particles[i]) * num_bin_1d + get<2>(moved_particles[i])].push_back(get<0>(moved_particles[i]));
+            bins[get<1>(moved_particles[i]) * num_bin_1d + get<2>(moved_particles[i])].push_back(get<0>(moved_particles[i]));
         }
         moved_particles.clear();
 
@@ -164,7 +164,7 @@ int main(int argc, char **argv)
                 {
                     for (int j = 0; j < num_bin_1d; j++)
                     {
-                        vector<particle_t> &bin = particle_bins[i * num_bin_1d + j];
+                        vector<particle_t> &bin = bins[i * num_bin_1d + j];
                         for (int k = 0; k < bin.size(); k++)
                         {
                             particles[index] = bin[k];
