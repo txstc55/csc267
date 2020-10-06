@@ -3,27 +3,31 @@
 #include <assert.h>
 #include <math.h>
 #include <vector>
-#include <tuple>
 #include "common.h"
+#include <algorithm> // std::sort
 
 using namespace std;
 
 #define cutoff 0.01
 #define density 0.0005
-#define bin_size_multiplier 4
-#define min(a, b) (((a) < (b)) ? (a) : (b))
-#define max(a, b) (((a) > (b)) ? (a) : (b))
+#define bin_size_multiplier 2
 
 double bin_size;
 int num_bin_1d;
 
-void buildBins(vector<vector<particle_t>> &bins, particle_t *particles, int n)
+typedef std::vector<particle_t> BIN; // for not supporting c++11
+
+void buildBins(vector<BIN> &bins, particle_t *particles, int n)
 {
     double size = sqrt(n * density);
     bin_size = cutoff * bin_size_multiplier;
     num_bin_1d = size / bin_size + 1;
 
     bins.resize(num_bin_1d * num_bin_1d);
+    for (int i = 0; i < num_bin_1d * num_bin_1d; i++)
+    {
+        bins[i].reserve(10);
+    }
 
     for (int i = 0; i < n; i++)
     {
@@ -31,6 +35,29 @@ void buildBins(vector<vector<particle_t>> &bins, particle_t *particles, int n)
         int row = particles[i].y / bin_size;
         bins[col * num_bin_1d + row].push_back(particles[i]);
     }
+}
+
+inline void binMovements(BIN &bin, int i, int j, BIN &moved_particles)
+{
+    int current_index = 0;
+    int last = bin.size();
+    for (int k = 0; k < bin.size(); k++)
+    {
+        move(bin[current_index]);
+        int col = bin[current_index].x / bin_size;
+        int row = bin[current_index].y / bin_size;
+        // the particle has been moved, we need to exclude it from this bin
+        // and save it to a tmp place so that it will not be computed twice
+        if (col != i || row != j)
+        {
+            moved_particles.push_back(bin[current_index]);
+            bin[current_index] = bin[last - 1];
+            last--;
+            continue;
+        }
+        current_index++;
+    }
+    bin.resize(last);
 }
 
 //
@@ -65,85 +92,195 @@ int main(int argc, char **argv)
     init_particles(n, particles);
 
     // init the bin
-    vector<vector<particle_t>> bins;
+    vector<BIN> bins;
     buildBins(bins, particles, n);
 
     // whenever a particle is moved out of the bin
     // it will be placed here first
-    vector<tuple<particle_t, int, int>> moved_particles;
-    moved_particles.reserve(num_bin_1d); // reserve some space
+    BIN moved_particles;
+    moved_particles.reserve(n); // reserve some space
+    int i, j;
 
     double simulation_time = read_timer();
 
-    // for each bin, get interaction within the bin and the 8 neighbors
     for (int step = 0; step < NSTEPS; step++)
     {
         navg = 0;
         davg = 0.0;
         dmin = 1.0;
 
-        for (int i = 0; i < num_bin_1d; i++)
+        // first setting acceleration to 0
+        for (i = 0; i < num_bin_1d; i++)
         {
-            for (int j = 0; j < num_bin_1d; j++)
+            for (j = 0; j < num_bin_1d; j++)
             {
-                vector<particle_t> &bin = bins[i * num_bin_1d + j];
-                if (bin.size() != 0)
-                {
-                    for (int k = 0; k < bin.size(); k++)
-                    {
-                        bin[k].ax = 0.0;
-                        bin[k].ay = 0.0;
-                    }
-                    for (int i_neighbor = max(0, i - 1); i_neighbor < min(num_bin_1d, i + 2); i_neighbor++)
-                    {
-                        for (int j_neighbor = max(0, j - 1); j_neighbor < min(num_bin_1d, j + 2); j_neighbor++)
-                        {
-                            vector<particle_t> &bin_neighbor = bins[i_neighbor * num_bin_1d + j_neighbor];
-                            for (int k = 0; k < bin.size(); k++)
-                            {
-                                for (int l = 0; l < bin_neighbor.size(); l++)
-                                {
-                                    apply_force(bin[k], bin_neighbor[l], &dmin, &davg, &navg);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < num_bin_1d; i++)
-        {
-            for (int j = 0; j < num_bin_1d; j++)
-            {
-                vector<particle_t> &bin = bins[i * num_bin_1d + j];
-                int current_index = 0;
-                int last = bin.size();
+                BIN &bin = bins[i * num_bin_1d + j];
                 for (int k = 0; k < bin.size(); k++)
                 {
-                    move(bin[current_index]);
-                    int col = int(bin[current_index].x / bin_size);
-                    int row = int(bin[current_index].y / bin_size);
-                    // the particle has been moved, we need to exclude it from this bin
-                    // and save it to a tmp place so that it will not be computed twice
-                    if (col != i || row != j)
-                    {
-                        moved_particles.push_back(tuple<particle_t, int, int>(bin[current_index], col, row));
-                        bin[current_index] = bin[last - 1];
-                        last--;
-                        continue;
-                    }
-                    current_index++;
+                    bin[k].ax = 0.0;
+                    bin[k].ay = 0.0;
                 }
-                bin.resize(last);
+            }
+        }
+        // printf("Max number of particle in bin is: %d\n", max_particles_in_bin);
+
+        // now, for each bin, what we can do is to loop through bins at position
+        // (i, j+1), (i + 1, j-1), (i+1, j), (i+1, j+1)
+        // particles in the two neighbors will interact with each other
+        // this way, we do not need to do 9 neighbors
+        for (i = 0; i < num_bin_1d - 1; i++)
+        {
+            // deal with the first row
+            j = 0;
+            BIN &bin_first_row = bins[i * num_bin_1d + j];
+            if (bin_first_row.size() != 0)
+            {
+                BIN &bin_neighbor_0 = bins[i * num_bin_1d + j + 1];
+                BIN &bin_neighbor_2 = bins[(i + 1) * num_bin_1d + j];
+                BIN &bin_neighbor_3 = bins[(i + 1) * num_bin_1d + j + 1];
+                for (int k = 0; k < bin_first_row.size(); k++)
+                {
+                    for (int l = k + 1; l < bin_first_row.size(); l++)
+                    {
+                        apply_force(bin_first_row[k], bin_first_row[l], &dmin, &davg, &navg);
+                        apply_force(bin_first_row[l], bin_first_row[k], &dmin, &davg, &navg);
+                    }
+                    for (int l = 0; l < bin_neighbor_0.size(); l++)
+                    {
+                        apply_force(bin_first_row[k], bin_neighbor_0[l], &dmin, &davg, &navg);
+                        apply_force(bin_neighbor_0[l], bin_first_row[k], &dmin, &davg, &navg);
+                    }
+                    for (int l = 0; l < bin_neighbor_2.size(); l++)
+                    {
+                        apply_force(bin_first_row[k], bin_neighbor_2[l], &dmin, &davg, &navg);
+                        apply_force(bin_neighbor_2[l], bin_first_row[k], &dmin, &davg, &navg);
+                    }
+                    for (int l = 0; l < bin_neighbor_3.size(); l++)
+                    {
+                        apply_force(bin_first_row[k], bin_neighbor_3[l], &dmin, &davg, &navg);
+                        apply_force(bin_neighbor_3[l], bin_first_row[k], &dmin, &davg, &navg);
+                    }
+                }
+                binMovements(bin_first_row, i, j, moved_particles);
+            }
+
+            for (j = 1; j < num_bin_1d - 1; j++)
+            {
+                BIN &bin = bins[i * num_bin_1d + j];
+                if (bin.size() != 0)
+                {
+                    BIN &bin_neighbor_0 = bins[i * num_bin_1d + j + 1];
+                    BIN &bin_neighbor_1 = bins[(i + 1) * num_bin_1d + j - 1];
+                    BIN &bin_neighbor_2 = bins[(i + 1) * num_bin_1d + j];
+                    BIN &bin_neighbor_3 = bins[(i + 1) * num_bin_1d + j + 1];
+                    for (int k = 0; k < bin.size(); k++)
+                    {
+                        for (int l = k + 1; l < bin.size(); l++)
+                        {
+                            apply_force(bin[k], bin[l], &dmin, &davg, &navg);
+                            apply_force(bin[l], bin[k], &dmin, &davg, &navg);
+                        }
+                        for (int l = 0; l < bin_neighbor_0.size(); l++)
+                        {
+                            apply_force(bin[k], bin_neighbor_0[l], &dmin, &davg, &navg);
+                            apply_force(bin_neighbor_0[l], bin[k], &dmin, &davg, &navg);
+                        }
+                        for (int l = 0; l < bin_neighbor_1.size(); l++)
+                        {
+                            apply_force(bin[k], bin_neighbor_1[l], &dmin, &davg, &navg);
+                            apply_force(bin_neighbor_1[l], bin[k], &dmin, &davg, &navg);
+                        }
+                        for (int l = 0; l < bin_neighbor_2.size(); l++)
+                        {
+                            apply_force(bin[k], bin_neighbor_2[l], &dmin, &davg, &navg);
+                            apply_force(bin_neighbor_2[l], bin[k], &dmin, &davg, &navg);
+                        }
+                        for (int l = 0; l < bin_neighbor_3.size(); l++)
+                        {
+                            apply_force(bin[k], bin_neighbor_3[l], &dmin, &davg, &navg);
+                            apply_force(bin_neighbor_3[l], bin[k], &dmin, &davg, &navg);
+                        }
+                    }
+                    binMovements(bin, i, j, moved_particles);
+                }
+            }
+
+            // deal with the last row
+            BIN &bin_last_row = bins[i * num_bin_1d + j];
+            if (bin_last_row.size() != 0)
+            {
+                BIN &bin_neighbor_1 = bins[(i + 1) * num_bin_1d + j - 1];
+                BIN &bin_neighbor_2 = bins[(i + 1) * num_bin_1d + j];
+                for (int k = 0; k < bin_last_row.size(); k++)
+                {
+                    for (int l = k + 1; l < bin_last_row.size(); l++)
+                    {
+                        apply_force(bin_last_row[k], bin_last_row[l], &dmin, &davg, &navg);
+                        apply_force(bin_last_row[l], bin_last_row[k], &dmin, &davg, &navg);
+                    }
+                    for (int l = 0; l < bin_neighbor_1.size(); l++)
+                    {
+                        apply_force(bin_last_row[k], bin_neighbor_1[l], &dmin, &davg, &navg);
+                        apply_force(bin_neighbor_1[l], bin_last_row[k], &dmin, &davg, &navg);
+                    }
+                    for (int l = 0; l < bin_neighbor_2.size(); l++)
+                    {
+                        apply_force(bin_last_row[k], bin_neighbor_2[l], &dmin, &davg, &navg);
+                        apply_force(bin_neighbor_2[l], bin_last_row[k], &dmin, &davg, &navg);
+                    }
+                }
+                binMovements(bin_last_row, i, j, moved_particles);
             }
         }
 
-        // deal with the particles that has been moved out of the bin
-        for (int i = 0; i < moved_particles.size(); i++)
+        // deal with the last column
+        for (j = 0; j < num_bin_1d - 1; j++)
         {
-            bins[get<1>(moved_particles[i]) * num_bin_1d + get<2>(moved_particles[i])].push_back(get<0>(moved_particles[i]));
+            BIN &bin = bins[i * num_bin_1d + j];
+            if (bin.size() != 0)
+            {
+                BIN &bin_neighbor_0 = bins[i * num_bin_1d + j + 1];
+                for (int k = 0; k < bin.size(); k++)
+                {
+                    for (int l = k + 1; l < bin.size(); l++)
+                    {
+                        apply_force(bin[k], bin[l], &dmin, &davg, &navg);
+                        apply_force(bin[l], bin[k], &dmin, &davg, &navg);
+                    }
+                }
+                for (int k = 0; k < bin.size(); k++)
+                {
+                    for (int l = 0; l < bin_neighbor_0.size(); l++)
+                    {
+                        apply_force(bin[k], bin_neighbor_0[l], &dmin, &davg, &navg);
+                        apply_force(bin_neighbor_0[l], bin[k], &dmin, &davg, &navg);
+                    }
+                }
+                binMovements(bin, i, j, moved_particles);
+            }
         }
+
+        // deal with the very last bin at the corner
+        BIN &last_bin = bins[i * num_bin_1d + j];
+        for (int k = 0; k < last_bin.size(); k++)
+        {
+            for (int l = k + 1; l < last_bin.size(); l++)
+            {
+                apply_force(last_bin[k], last_bin[l], &dmin, &davg, &navg);
+                apply_force(last_bin[l], last_bin[k], &dmin, &davg, &navg);
+            }
+        }
+        // move the particles in the last bin
+        binMovements(last_bin, i, j, moved_particles);
+
+        // deal with the particles that has been moved out of the bin
+        for (i = 0; i < moved_particles.size(); i++)
+        {
+            int col = moved_particles[i].x / bin_size;
+            int row = moved_particles[i].y / bin_size;
+            bins[col * num_bin_1d + row].push_back(moved_particles[i]);
+        }
+        // printf("Out of bin particle size: %d\n", moved_particles.size());
         moved_particles.clear();
 
         if (find_option(argc, argv, "-no") == -1)
@@ -160,11 +297,11 @@ int main(int argc, char **argv)
             if (fsave && (step % SAVEFREQ) == 0)
             {
                 int index = 0;
-                for (int i = 0; i < num_bin_1d; i++)
+                for (i = 0; i < num_bin_1d; i++)
                 {
-                    for (int j = 0; j < num_bin_1d; j++)
+                    for (j = 0; j < num_bin_1d; j++)
                     {
-                        vector<particle_t> &bin = bins[i * num_bin_1d + j];
+                        BIN &bin = bins[i * num_bin_1d + j];
                         for (int k = 0; k < bin.size(); k++)
                         {
                             particles[index] = bin[k];
